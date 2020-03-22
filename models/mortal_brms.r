@@ -4,6 +4,7 @@ library(data.table)
 library(brms)
 library(bayesplot)
 library(tidybayes)
+library(brmstools)
 
 setwd("/Users/wbeard/repos/crash/notebooks/")
 pl <- function(ct, fn) {
@@ -20,16 +21,32 @@ pth <- 'covid/data/mort_0320.fth'
 pth_sim <- 'covid/data/mort_0320_sim.fth'
 df = read_feather(pth) %>% as.data.frame()
 
-head(df)
+# head(df)
+# make_stancode(f, df)
 
 # Model
-f = (bf(ldeaths ~ daysi + (1 | state))) + gaussian()
-mdeath1 <- brm(f, df, cores = 4, control = list(adapt_delta = .995))
+# f = bf(ldeaths ~ daysi + (1 | state)) + gaussian()
+# mdeath1 <- brm(f, df, cores = 4, control = list(adapt_delta = .995))
 
-f = bf(ldeaths ~ dayrate + (1 | state), dayrate ~ state) + poisson()
-make_stancode(f, df)
-mdeath2 <- brm(f, df, cores = 4, control = list(adapt_delta = .995))
 
+f = bf(ldeaths ~ (1 | state) + daysi + (0 + daysi | state))
+mdeath3 <- brm(f, df, prior = c(
+  prior(normal(0, 2), class = b)
+  # prior(normal(0, 2), class = sigma),
+  # prior(normal(0, 2), class = Intercept)
+), cores = 4, control = list(adapt_delta = .995, max_treedepth = 12))
+mdeath3
+state <- coef(mdeath3)$state[,,2]
+state <- data.frame(state = row.names(state), state)
+write_feather(as.data.frame(state), 'covid/data/mort_m2_coef.fth')
+mdeath3
+
+
+m <- brm(bf(ldeaths ~ (1 + daysi | state)), prior =  data = df)
+get_prior(f, data = df)
+
+get_prior(bf(ldeaths ~ (1 | state) + (0 + daysi | state)), data = df)
+get_prior(bf(ldeaths ~ (1 | state) + daysi + (0 + daysi | state)), data = df)
 # , max_treedepth = 13
 
 
@@ -56,7 +73,8 @@ get_preds <- function(mod, prefix, df_new_base) {
 
 dfsim = read_feather(pth_sim) %>% as.data.frame()
 
-dfsim_out = get_preds(mdeath1, 'pred', dfsim)
+dfsim_out = get_preds(mdeath3, 'pred', dfsim)
 write_feather(dfsim_out, 'covid/data/mort_0320_sim_out.fth')
+write_feather(dfsim_out, 'covid/data/mort_v2_sim_out.fth')
 
 # dfsim$row <- 1:nrow(dfsim)
