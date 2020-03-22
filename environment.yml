@@ -1,0 +1,104 @@
+name: crash
+# channels:
+#  - defaults
+#  - conda-forge
+#  - pytorch
+dependencies:
+- python=3.6
+
+# Bare necessities
+- flake8
+- cython
+- pandas
+- xlrd
+- numba
+- scipy < 1.3.0
+# https://github.com/statsmodels/statsmodels/issues/5747
+- seaborn
+- jupyterlab
+- simplejson
+# - notebook < 5
+
+# HTML
+- lxml
+- beautifulsoup4
+- requests
+- html5lib
+
+# ML
+# - pytorch
+- scikit-learn
+# - torchvision
+# - gensim  # =0.12.4
+# - pomegranate
+- pystan
+
+- joblib
+# - bcolz
+- fastparquet
+- dask
+- python-snappy
+
+# New
+- altair
+- pip
+#- pymc3
+- pip:
+  - autopep8
+  - black
+  - feather-format
+  - flake8-mypy
+  - jupyter_nbextensions_configurator
+  - jupytext
+  # - line-profiler  # doesn't work w/ 3.7
+  - jupyterlab_code_formatter
+  - plotnine
+  - pylint
+  - pytest
+  - sqlitedict
+  - toolz
+
+  # DL
+  # - keras
+  # - chainer
+
+  # HTML
+  - requests_cache
+  - redis
+  - pandas_datareader
+  # - grequests
+  - lifetimes
+  - pycausalimpact
+
+  # TS
+  # - tsfresh
+  # - pyflux
+  - fbprophet
+
+  # MISC
+  - fire
+  # - parsec
+  # - "ipython[notebook]<4"
+  # - snakeviz
+  # - pygraphviz
+  # - fuzzywuzzy
+  # - voluptuous
+  - arviz
+  - python-dotenv>=0.5.1
+  # new
+  - plotnine
+  - probscale
+
+  # Data
+  - google-cloud-bigquery
+  - pandas-gbq
+  - selenium
+
+# jupyter contrib nbextension install --user --skip-running-check
+# jt -t grade3 -cellw '100%'
+
+# jupyter labextension install jupyterlab_vim @jupyterlab/toc @ryantam626/jupyterlab_code_formatter
+
+
+# jupyter labextension install @jupyterlab/toc
+# jupyter labextension install jupyterlab_vim @jupyterlab/vega3-extension

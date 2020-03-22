@@ -1,0 +1,1 @@
+Formula: bf(ldeaths ~ daysi + (1 | state)) + gaussian()
