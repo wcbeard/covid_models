@@ -255,8 +255,64 @@ m2pl_lin & m2pl_log
 p2 = pl(dfd, x='daysi', y='death')
 p2
 
+# %% [markdown]
+# # Deaths ~ delayed infection
+
 # %%
-dfs[:3]
+# Delayed df w/ state data
+# 4 days w/ recorded deaths
+ddfs = cvs.filter_mortality(dfs, days_previous=4, min_death_days=4)
+
+# %%
+# ddfs = dfs.query("positive > 0").query("n_pct_rows > 3")
+
+# %%
+_ints = ["death", "total", "positive", "pos_delayed", "tot_delayed"]
+ddelayed = (
+    ddfs[["state"] + _ints]
+    .query("pos_delayed > 0")
+    .assign(**{icol: lambda x, icol=icol: x[icol].astype(int) for icol in _ints})
+    .reset_index(drop=1)
+)
+
+ddelayed.to_feather(data_dir / 'mort_delayed_0322.fth')
+# dfsim1_.to_feather(data_dir / 'mort_0320_sim.fth')
+
+# %%
+import pystan
+
+mod = ms.compile('../models/mortal.stan')
+
+
+# %%
+def mk_data(df):
+    returna = dict(
+        N=len(df),
+        S=df.state.nunique(),
+        npos_delayed,
+        ntot_delayed,
+    )
+    return data
+
+data = mk_data(ddelayed)
+
+# %%
+ddelayed[:3]
+
+# %%
+pdf = ddfs.query("positive > 0").query("n_pct_rows > 3")
+
+# %%
+pdf = ddfs.query("positive > 0").query("n_pct_rows > 3").query("tot_delayed > 0")
+p1 = pl(pdf, y="death", x="positive", color="state", tt=['perc'])
+p2 = pl(pdf.query("~dupe_neg"), y="death", x="pos_delayed")
+p3 = pl(pdf.query("~dupe_neg"), y="pos_delayed", x="tot_delayed", logy=1, logx=1)
+p1 | p2 | p3
+
+# %%
+pl(pdf, color="state") | pl(pdf.query("~dupe_neg"), y="negative") |  pl(pdf.query("~dupe_neg"), y="perc", logy=0)
+
+# %%
 
 # %%
 pdf = dfs.query("positive > 0").query("n_pct_rows > 3")

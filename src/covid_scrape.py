@@ -250,10 +250,14 @@ def filter_mortality(dfs, days_previous=4, min_death_days=4):
     dfd = (
         dfs.query(f"state in {mortal_states}")
         .query("death > 3")
+        .assign(tot=lambda x: x["positive"] + x["negative"])
         .assign(
             pos_delayed=lambda df: df.groupby(["state"]).positive.transform(
                 mkshft(days_previous)
-            )
+            ),
+            tot_delayed=lambda df: df.groupby(["state"]).tot.transform(
+                mkshft(days_previous)
+            ),
         )
     )
     return dfd
