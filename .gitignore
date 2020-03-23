@@ -1,1 +1,3 @@
 data/
+*.pq
+.ipynb_checkpoints/

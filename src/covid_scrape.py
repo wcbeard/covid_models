@@ -263,16 +263,27 @@ def filter_mortality(dfs, days_previous=4, min_death_days=4):
 lgs = A.Scale(type="log", zero=False)
 
 
-def pl(pdf, color="state", x="date", y="positive", ii=True, logy=True):
+def pl(
+    pdf,
+    color="state",
+    x="date",
+    y="positive",
+    ii=True,
+    logy=True,
+    logx=False,
+    tt=[],
+):
+    tt = list(tt)
     ykw = dict(scale=lgs) if logy else {}
+    xkw = dict(scale=lgs) if logx else {}
     h = (
         A.Chart(pdf)
         .mark_line()
         .encode(
-            x=A.X(x, title=x),
+            x=A.X(x, title=x, **xkw),
             y=A.Y(y, title=y, **ykw),
             color=color,
-            tooltip=[color, x, y],
+            tooltip=[color, x, y] + tt,
         )
     )
     hh = h + h.mark_point()

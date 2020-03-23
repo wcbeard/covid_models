@@ -26,6 +26,8 @@ sns.set_style('whitegrid')
 
 
 A.data_transformers.enable('json', prefix='../data/altair-data')
+A.data_transformers.enable('default')
+
 S = Series; D = DataFrame
 
 from big_query import bq_read
@@ -106,8 +108,8 @@ p1 | p2 | p3
 dfd = cvs.filter_mortality(dfs)
 
 # %%
-p1 = pl(dfd, color='state', x='pos_delayed', y='death', ii=True, logy=True)
-p2 = pl(dfd, color='state', x='positive', y='death', ii=True, logy=True)
+p1 = pl(dfd, color='state', x='pos_delayed', y='death', ii=True, logy=1)
+p2 = pl(dfd, color='state', x='positive', y='death', ii=True, logy=1, logx=1, tt=['date'])
 # p2 = pl(dfd, color='state', x='positive', y='death', ii=True, logy=True)
 p1 | p2
 
@@ -140,8 +142,7 @@ dfd = (
     .drop(["dateChecked", 'pending'], axis=1)
 )
 
-dfd.to_feather('covid/data/mort_0320.fth')
-
+# dfd.to_feather('covid/data/mort_0320.fth')
 
 # %%
 def mk_sim_df1(dfd):
@@ -154,7 +155,7 @@ def mk_sim_df1(dfd):
 
 
 dfsim1_ = mk_sim_df1(dfd)
-dfsim1_.to_feather('covid/data/mort_0320_sim.fth')
+# dfsim1_.to_feather('covid/data/mort_0320_sim.fth')
 
 # %%
 dfsim1[:3]
@@ -167,74 +168,6 @@ dfsim_out = pd.read_feather('covid/data/mort_0320_sim_out.fth')
 
 # %%
 dfsim1 = dfsim1_.merge(dfsim_out, on='row').pipe(log_preds)
-
-# %%
-p2 = pl(dfd, x='daysi', y='death')
-p2
-
-# %%
-dfsim1[:3]
-
-# %%
-for k, gdf in dfsim1.groupby('state'):
-    plt.plot(gdf.daysi, gdf.pred_mu, '.-', label=k)
-    plt.fill_between(gdf.daysi, gdf.pred_q10, gdf.pred_q90, alpha=.2)
-    break
-
-
-
-# %%
-gdf.pred_q90
-
-# %%
-dfd[:3]
-
-# %%
-color = "state"
-x = "daysi"
-y = "pred_mu"
-
-
-pred = dfsim1
-
-actual = dfd.assign(pred_mu=lambda x: x['death'])
-
-
-def deco(ch):
-    h = ch.mark_line().encode(
-        x=A.X(x, title=x),
-        y=A.Y(y, title=y, scale=lgs),
-        color=color,
-        tooltip=[color, x, y],
-    )
-    return h
-
-
-
-h_act = deco(Chart(actual))
-h_est = deco(Chart(pred))
-h_est_err = h_est.mark_errorband().encode(
-    y="pred_q10", y2="pred_q90", x="daysi", color=color,
-)
-
-
-# p1.mark_errorband(y='pref_q10', y2='pref_q90')
-# Chart(pdf)
-# h.mark_errorband().encode(
-#     y="pred_q10", y2="pred_q90", x="daysi", color=color,
-# ) + h + h.mark_point()
-
-ch_act = (h_act + h_act.mark_point())
-
-ch_est = h_est + h_est.mark_point() + h_est_err
-
-ch_act + ch_est
-
-# %%
-p1 = pl(dfsim1, x='daysi', y='pred_mu')
-p1
-
-# %%
 
 # %%
 dfs[:3]

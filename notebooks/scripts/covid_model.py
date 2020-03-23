@@ -202,6 +202,8 @@ herr + h
 
 
 # %%
+
+# %%
 def plot_preds_act(dfsim, dfd, form, x = "daysi", log=True):
     color = "state"
     yargs = {}
@@ -237,20 +239,17 @@ def plot_preds_act(dfsim, dfd, form, x = "daysi", log=True):
 # bf(ldeaths ~ (1 | state) + daysi + (0 + daysi | state))
 form2 = "ldeaths ~ (1 | state) + daysi + (0 + daysi | state)"
 
-plot_preds_act(dfsim=dfsim2, dfd=dfd, form=form2, x='date').properties(width=900, height=600)
-
-# %%
-plot_preds_act(dfsim=dfsim2, dfd=dfd, form=form2, x='date').properties(width=900, height=600)
-
-# %%
 m2pl_lin = plot_preds_act(dfsim=dfsim2, dfd=dfd, form=form2, x='date', log=0).properties(width=900, height=600)
 m2pl_log = plot_preds_act(dfsim=dfsim2, dfd=dfd, form=form2, x='date', log=1).properties(width=900, height=600)
 
 with A.data_transformers.enable('default'):
-    A.Chart.save(m2pl_lin, 'covid/fig/m2_pred_lin.png')
+    A.Chart.save(m2pl_lin, '../fig/m2_pred_lin_0322.png')
 
 with A.data_transformers.enable('default'):
-    A.Chart.save(m2pl_log, 'covid/fig/m2_pred_log.png')
+    A.Chart.save(m2pl_log, '../fig/m2_pred_log_0322.png')
+
+# %%
+m2pl_lin & m2pl_log
 
 # %%
 p2 = pl(dfd, x='daysi', y='death')

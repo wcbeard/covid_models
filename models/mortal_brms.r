@@ -17,8 +17,8 @@ pl <- function(ct, fn) {
   dev.off()
 }
 
-pth <- 'covid/data/mort_0320.fth'
-pth_sim <- 'covid/data/mort_0320_sim.fth'
+pth <- 'mort_0320.fth'
+pth_sim <- 'mort_0320_sim.fth'
 df = read_feather(pth) %>% as.data.frame()
 
 # head(df)
@@ -38,7 +38,7 @@ mdeath3 <- brm(f, df, prior = c(
 mdeath3
 state <- coef(mdeath3)$state[,,2]
 state <- data.frame(state = row.names(state), state)
-write_feather(as.data.frame(state), 'covid/data/mort_m2_coef.fth')
+write_feather(as.data.frame(state), 'mort_m2_coef.fth')
 mdeath3
 
 
