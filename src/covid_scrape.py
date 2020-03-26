@@ -77,7 +77,7 @@ def save_ga_county(df):
         print("written today")
         return fout
 
-    print("New data!")
+    print(f"New data!\n{fout}")
     df.to_csv(fout, index=False)
 
     return fout
@@ -148,6 +148,7 @@ def save_ga_agg(df):
     if fn.exists():
         print(f"File for {date} already exists!")
         return fn
+    print(f"New data!\n{fn}")
     df.to_csv(fn)
     return fn
 
@@ -250,6 +251,7 @@ def filter_mortality(dfs, days_previous=4, min_death_days=4):
     dfd = (
         dfs.query(f"state in {mortal_states}")
         .query("death > 3")
+        .sort_values(["state", "date"], ascending=True)
         .assign(tot=lambda x: x["positive"] + x["negative"])
         .assign(
             pos_delayed=lambda df: df.groupby(["state"]).positive.transform(
@@ -259,8 +261,23 @@ def filter_mortality(dfs, days_previous=4, min_death_days=4):
                 mkshft(days_previous)
             ),
         )
+        .assign(perc_delayed=lambda df: df.pos_delayed / df.tot_delayed)
+        .assign(
+            prev_perc_delayed=lambda x: x.groupby(
+                ["state"], sort=False
+            ).perc_delayed.transform(shift_perc_del)
+        )
     )
     return dfd
+
+
+def shift_perc_del(perc_delayed):
+    fill_s = perc_delayed.dropna()
+    if len(fill_s):
+        fill_value = fill_s.iloc[0]
+    else:
+        fill_value = np.nan
+    return perc_delayed.shift(1).fillna(fill_value)
 
 
 # Plot
