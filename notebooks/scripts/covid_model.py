@@ -51,6 +51,7 @@ import models.stan_mods as sm
 
 # %%
 import covid_scrape as cvs
+from covid_scrape import add_point, add_line, A
 from covid_scrape import lgs, pl
 import model_transformations as mtx
 
@@ -64,8 +65,9 @@ dfct = cvs.load_ga_county()
 ga_agg = cvs.load_ga_agg()
 
 # %%
+date_arg = '03-26'
 dfs = (
-    load_states(date="03-25")
+    load_states(date=date_arg)
     .sort_values(["state", "date"], ascending=True)
     .reset_index(drop=1)
 )
@@ -74,50 +76,11 @@ dfs = cvs.process_state(dfs)
 print(f"Current actual max date: {cvs.load_states().date.max()}")
 
 
-# %%
-@mem.cache
-def load2(date='03224'):
-    return pd.read_csv('https://coronadatascraper.com/timeseries-tidy.csv')
-
-
-# %%
-dfs2 = load2(date='03224')
-def _proc(df):
-    df = (
-        df
-        .drop(['lat', 'long', 'url', ], axis=1)
-        .query("country == 'USA'")
-    )
-    return df
-
-dfs2 = _proc(dfs2)
-
-# %%
-tx = dfs2.assign(null_cty=lambda x: x.county.isnull()).query("date == '2020-03-24'").query("state == 'TX'")
-
-tx.groupby(['type', 'null_cty']).value.sum().unstack().fillna(0).astype(int)
-
-
 # %% [markdown]
 # # Models
 
 # %% [markdown]
 # ## Mortality model
-
-# %%
-def write_model(mbase, dfsim, form, plot):
-    """
-    Save formula, plots, vegalite spec, predicted data to `mbase`
-    model dir.
-    """
-    dfsim.to_parquet(mbase / 'preds.pq')
-    with open(mbase / 'form.txt', 'w') as fp:
-        fp.write(f"Formula: {form}")
-        
-    with A.data_transformers.enable('default'):
-        A.Chart.save(plot, str(mbase / 'preds.png'))
-        A.Chart.save(plot, str(mbase / 'preds.json'))
-
 
 # %%
 # import pystan
@@ -143,6 +106,9 @@ dfd = (
 def dayi2date(i):
     return min_date + pd.Timedelta(days=i)
 
+
+# %% [markdown]
+# ## Data for predictions
 
 # %%
 dfsim1_ = mtx.mk_sim_df1(dfd).assign(date=lambda x: x.daysi.map(dayi2date))
@@ -324,7 +290,7 @@ m2pl_log.properties(width=500, height=400).interactive()
 # ## Log and Linear
 
 # %%
-m2pl_lin & m2pl_log
+m2pl_log & m2pl_lin
 
 # %%
 p2 = pl(dfd, x='date', y='death')
@@ -342,22 +308,14 @@ p2
 ddfs = cvs.filter_mortality(dfs, days_previous=4, min_death_days=4)
 
 # %%
-
-# %%
 ddelayed[:3]
 
 # %%
+mod = ms.compile('../models/mortal2.stan')
 
-# %%
-# mod = ms.compile('../models/mortal2.stan')
-
-
-# %%
 
 # %%
 ddfs.query("pos_delayed > 0")[:3]
-
-# %%
 
 # %%
 ddelayed = sm.Mpv1.preprocess_data(ddfs)
@@ -413,8 +371,6 @@ r1 & r2
 ddfs = cvs.filter_mortality(dfs, days_previous=4, min_death_days=4)
 
 # %%
-
-# %%
 mod = ms.compile('../models/mortal_delay.stan')
 
 
@@ -444,6 +400,10 @@ ddelayed = (
 )
 data = mk_data(ddelayed)
 
+# %%
+res = mod.sampling(data=data)
+par_p_delay = ms.extract_arrs(res, pars='p_delay')['p_delay']
+
 
 # %%
 # data['perc_delayed']
@@ -463,29 +423,14 @@ def update_perc_est(ddelayed, res, parname='p_delay', pref='pdel'):
 
 
 # %%
+ddelayed.date.max()
+
+# %%
 ddelayed = update_perc_est(ddelayed, res)
 ddelayed = update_perc_est(ddelayed, res, parname='b_death', pref='bdeath')
 
 # %%
 ddelayed[:3]
-
-# %%
-res = mod.sampling(data=data)
-par_p_delay = ms.extract_arrs(res, pars='p_delay')['p_delay']
-
-
-# %%
-def pipe(h, f):
-    return f(h)
-
-A.Chart.pipe = pipe
-
-def add_point(h):
-    return h + h.mark_point()
-
-def add_line(h):
-    return h + h.mark_line()
-
 
 # %%
 h.pipe(add_point)
@@ -519,6 +464,42 @@ r3 = h.encode(y='bdeath50').pipe(add_point) + h.mark_errorband().encode(y='bdeat
 
 r1 & r2
 r3
+
+# %%
+ddelayed[:3]
+
+# %%
+ddelayed = (
+    ddelayed.assign(
+        death_perc=lambda x: x.death / x.pos_delayed,
+        perc_delayed_s=lambda x: x.perc_delayed.mul(100).round(1),
+    )
+    .assign(
+        death_perc_s=lambda x: x.death_perc.mul(100).round(1),
+    )
+    .sort_values(["state", "date"])
+    .reset_index(drop=1)
+)
+ddelayed[:3]
+
+# %%
+y = "death_perc"
+x = "perc_delayed"
+
+h = (
+    Chart(ddelayed)
+    .mark_line()
+    .encode(
+        x=A.X(x, title=x),
+        y=A.Y(y, title=y),
+        color=color,
+        tooltip=["perc_delayed_s", "death_perc_s", color, x, y, "date"],
+    )
+)
+
+(h + h.mark_point()).interactive()
+
+# %%
 
 # %%
 b_delay = ms.extract_arrs(res)['b_death']
@@ -566,3 +547,30 @@ pdf = dfs.query("positive > 0").query("n_pct_rows > 3")
 
 # %%
 pl(pdf, color="state") | pl(pdf.query("~dupe_neg"), y="negative") |  pl(pdf.query("~dupe_neg"), y="perc", logy=0)
+
+
+# %% [markdown]
+# ## Secondary data source
+
+# %%
+@mem.cache
+def load2(date='03224'):
+    return pd.read_csv('https://coronadatascraper.com/timeseries-tidy.csv')
+
+
+# %%
+dfs2 = load2(date='03224')
+def _proc(df):
+    df = (
+        df
+        .drop(['lat', 'long', 'url', ], axis=1)
+        .query("country == 'USA'")
+    )
+    return df
+
+dfs2 = _proc(dfs2)
+
+# %%
+tx = dfs2.assign(null_cty=lambda x: x.county.isnull()).query("date == '2020-03-24'").query("state == 'TX'")
+
+tx.groupby(['type', 'null_cty']).value.sum().unstack().fillna(0).astype(int)

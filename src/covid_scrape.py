@@ -311,3 +311,32 @@ def pl(
     if ii:
         return hh.interactive()
     return hh
+
+
+def write_model(mbase, dfsim, form, plot):
+    """
+    Save formula, plots, vegalite spec, predicted data to `mbase`
+    model dir.
+    """
+    dfsim.to_parquet(mbase / "preds.pq")
+    with open(mbase / "form.txt", "w") as fp:
+        fp.write(f"Formula: {form}")
+
+    with A.data_transformers.enable("default"):
+        A.Chart.save(plot, str(mbase / "preds.png"))
+        A.Chart.save(plot, str(mbase / "preds.json"))
+
+
+def pipe(h, f):
+    return f(h)
+
+
+A.Chart.pipe = pipe
+
+
+def add_point(h):
+    return h + h.mark_point()
+
+
+def add_line(h):
+    return h + h.mark_line()
