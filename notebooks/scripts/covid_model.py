@@ -351,6 +351,7 @@ _ch2 = plot_preds_act(pred=pdfsim, actual=pdfd, form=form2, x='date', log=1, kee
 # %%
 jupyter = "/Users/wbeard/miniconda3/envs/avast/bin/jupyter"
 res = !"$jupyter" nbconvert --to html --template nbconvert_template_altair.tpl covid_model.ipynb
+# !cp covid_model.html ../index.html
 
 # %% [markdown]
 # # Log and Linear -- old
