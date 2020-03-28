@@ -59,13 +59,13 @@ data_dir = Path('../data')
 load_states = mem.cache(cvs.load_states)
 
 # %%
-cvs.pull_and_save_ga_county()
-cvs.pull_and_save_ga_agg()
+# cvs.pull_and_save_ga_county()
+# cvs.pull_and_save_ga_agg()
 dfct = cvs.load_ga_county()
 ga_agg = cvs.load_ga_agg()
 
 # %%
-date_arg = '03-26'
+date_arg = '03-27'
 dfs = (
     load_states(date=date_arg)
     .sort_values(["state", "date"], ascending=True)
@@ -114,8 +114,11 @@ def dayi2date(i):
 dfsim1_ = mtx.mk_sim_df1(dfd).assign(date=lambda x: x.daysi.map(dayi2date))
 
 # Write to R; generate simulations
-dfd.to_feather(data_dir / 'mort_0324.fth')
+dfd_wk = dfd.pipe(lambda x: x[x.date >= x.date.max() - pd.Timedelta(days=7)]).reset_index(drop=1)
+dfd_wk.to_feather(data_dir / 'mort_0327.fth')
 dfsim1_.to_feather(data_dir / 'mort_0324_sim.fth')
+
+# %%
 
 # %% [markdown]
 # ## Model v1
@@ -172,14 +175,18 @@ save_ch = (ch_act + ch_est).properties(title=form1)
 # %% [markdown]
 # ### Coefs
 
+# %% [markdown]
+# Estimate doubling rate below with rule of 72. Exponent for WA is about .05, so doubling rate is about 72 / 5 = 14.4 days. This gets less accurate (but still high) for higher coefficient states like NY.
+
 # %%
 color = 'dvers'
 x = 'state'
 y = 'Estimate'
 
 m2_coefs = (
-    pd.read_feather(data_dir / "mort_m2_coef.fth")
-    .sort_values("Est.Error", ascending=True)
+#     pd.read_feather(data_dir / "mort_m2_coef.fth")
+    pd.read_feather(data_dir / "mort_m2_coef_27w.fth")
+    .sort_values("Q97.5", ascending=False)
     .reset_index(drop=1)
 )
 
@@ -196,26 +203,43 @@ herr = h.mark_errorbar().encode(y=A.Y('Q2.5', title='Exponent'), y2='Q97.5')
 herr + h
 
 # %%
+# xs = np.arange(100)
+# yx = np.exp(xs * .1)
+
+# expdf = DataFrame(dict(x=xs, y=yx))
+# ixs = np.searchsorted(expdf.y, [1, 2, 4, 8, 16])
+# expdf.iloc[ixs].x.pipe(lambda x: x - x.shift(1))
+# plt.plot(xs, yx)
 
 # %% [markdown]
 # ### Load simulated data
 
 # %%
 # dfsim_out = pd.read_feather(data_dir / 'mort_v2_sim_out.fth')
-dfsim_out = pd.read_feather(data_dir / 'mort_0324_sim_out.fth')
-dfsim2 = dfsim1_.merge(dfsim_out, on='row').pipe(log_preds).assign(date=lambda x: x.daysi.map(dayi2date))
+# dfsim_out = pd.read_feather(data_dir / 'mort_0324_sim_out.fth')
+dfsim_out = pd.read_feather(data_dir / 'mort_0327_sim_out.fth').rename(columns={'pred_state': 'state', 'pred_daysi': 'daysi'})
+dfsim2 = dfsim1_.merge(dfsim_out, on=['state', 'daysi']).pipe(log_preds).assign(date=lambda x: x.daysi.map(dayi2date))
 
+
+# %% [markdown]
+# #### 03-27
+# Exponential growth in NYC is tapering off, but estimate takes previous 7 days of data, so it's still estimating high growth.
 
 # %%
-def plot_preds_act(dfsim, dfd, form, x = "daysi", log=True):
+def plot_preds_act(pred, actual, form, x = "daysi", log=True, keep_group=None):
     color = "state"
     yargs = {}
     if log:
         yargs['scale'] = lgs
     y = "pred_mu"
 
-    pred = dfsim
-    actual = dfd.assign(pred_mu=lambda x: x["death"])
+    state_mapping = cvs.clf_states_mapping(actual, topn=10)
+    actual = actual.assign(pred_mu=lambda x: x["death"], state_group=lambda x: x.state.map(state_mapping))
+    pred = pred.assign(state_group=lambda x: x.state.map(state_mapping))
+    
+    if keep_group is not None:
+        actual = actual.query("state_group == @keep_group")
+        pred = pred.query("state_group == @keep_group")
 
     def deco(ch):
         h = ch.mark_line().encode(
@@ -234,9 +258,9 @@ def plot_preds_act(dfsim, dfd, form, x = "daysi", log=True):
 
     ch_act = h_act + h_act.mark_point()
     ch_est = h_est + h_est.mark_point() + h_est_err
-
-    save_ch = (ch_act + ch_est).properties(title=form)
-    return save_ch
+#     return ch_est
+    save_ch = (ch_act + ch_est).properties(title=form, height=500, width=700)
+    return save_ch.interactive()
 
 
 states_low_deaths = dfd.groupby('state').death.max().pipe(lambda x: x[x < 10]).index.tolist()
@@ -247,8 +271,8 @@ form2 = "ldeaths ~ (1 | state) + daysi + (0 + daysi | state)"
 pdfsim = dfsim2.query("state not in @states_low_deaths")
 pdfd = dfd.query("state not in @states_low_deaths")
 
-m2pl_lin = plot_preds_act(dfsim=pdfsim, dfd=pdfd, form=form2, x='date', log=0).properties(width=900, height=600)
-m2pl_log = plot_preds_act(dfsim=pdfsim, dfd=pdfd, form=form2, x='date', log=1).properties(width=900, height=600)
+# m2pl_lin = plot_preds_act(pred=pdfsim, actual=pdfd, form=form2, x='date', log=0).properties(width=900, height=600)
+m2pl_log = plot_preds_act(pred=pdfsim, actual=pdfd, form=form2, x='date', log=1).properties(width=900, height=600)
 
 # with A.data_transformers.enable('default'):
 #     A.Chart.save(m2pl_lin, '../fig/m2_pred_lin_0324.png')
@@ -256,38 +280,17 @@ m2pl_log = plot_preds_act(dfsim=pdfsim, dfd=pdfd, form=form2, x='date', log=1).p
 # with A.data_transformers.enable('default'):
 #     A.Chart.save(m2pl_log, '../fig/m2_pred_log_0324.png')
 
-# %%
+_ch0 = plot_preds_act(pred=pdfsim, actual=pdfd, form=form2, x='date', log=1, keep_group=0)
+_ch1 = plot_preds_act(pred=pdfsim, actual=pdfd, form=form2, x='date', log=1, keep_group=1)
+_ch2 = plot_preds_act(pred=pdfsim, actual=pdfd, form=form2, x='date', log=1, keep_group=2)
+(_ch0 & _ch1 & _ch2)
 
 # %%
-dfd.date.max()
-
-# %%
-dfd[:3]
-
-# %%
-min_preds = '2020-03-24'
-_cs = 'date state positive negative tot ldeaths death daysi'.split()
-pdf_latest = dfd.query("date > @min_preds")[_cs]
-
-color = 'state'
-x = 'date'
-y = 'death'
-
-
-h = Chart(pdf_latest).mark_line().encode(
-    x=A.X(x, title=x),
-    y=A.Y(y, title=y, scale=lgs),
-    color=color,
-    tooltip=[color, x, y]
-)
-
-(h + h.mark_point()).interactive()
-
-# %%
-m2pl_log.properties(width=500, height=400).interactive()
+jupyter = "/Users/wbeard/miniconda3/envs/avast/bin/jupyter"
+res = !"$jupyter" nbconvert --to html --template nbconvert_template_altair.tpl covid_model.ipynb
 
 # %% [markdown]
-# ## Log and Linear
+# # Log and Linear -- old
 
 # %%
 m2pl_log & m2pl_lin

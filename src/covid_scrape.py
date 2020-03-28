@@ -1,4 +1,5 @@
 import datetime as dt
+import itertools as it
 from pathlib import Path
 import re
 import simplejson
@@ -340,3 +341,23 @@ def add_point(h):
 
 def add_line(h):
     return h + h.mark_line()
+
+
+def clf_states_mapping(df, n_groups=3, topn=4):
+    """
+    Order states by highest deaths into `n_groups`
+    """
+
+    df = df[["date", "state", "death"]]
+    df_latest = df.pipe(lambda x: x[x.date == x.date.max()]).sort_values(
+        "death", ascending=False
+    )
+    top4 = df_latest.state[:topn].tolist()
+    df_rest = df_latest.query("state not in @top4")
+    top4
+    q, _q = pd.qcut(df_rest.death, n_groups - 1, retbins=True, labels=False)
+    q += 1
+    mapping = dict(zip(df_rest.state, q))
+    mapping.update(dict(zip(top4, it.repeat(0))))
+    return mapping
+    # return df.state.map(mapping)
