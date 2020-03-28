@@ -94,7 +94,7 @@ dfd = cvs.filter_mortality(dfs)
 
 dfd = (
     dfd.assign(
-        ldeaths=lambda x: x.death.pipe(np.log10),
+        ldeaths=lambda x: x.death.pipe(np.log),
         daysi=lambda x: (x.date - x.date.min()).astype('timedelta64[D]').astype(int)
     )
     .reset_index(drop=1)
@@ -175,8 +175,68 @@ save_ch = (ch_act + ch_est).properties(title=form1)
 # %% [markdown]
 # ### Coefs
 
-# %% [markdown]
+# %%
 # Estimate doubling rate below with rule of 72. Exponent for WA is about .05, so doubling rate is about 72 / 5 = 14.4 days. This gets less accurate (but still high) for higher coefficient states like NY.
+
+# %%
+
+# %%
+WA = .05
+def doubling_time(ex):
+    return 1 / ex * np.log(2)
+
+doubling_time(.17)
+
+# %%
+draws = pd.read_feather(data_dir / "mort_draws.fth")
+growth_coef = (
+    draws.query("coef == 'daysi'")
+    .assign(coef=lambda x: x.b_daysi + x.r_state)
+    .groupby(["state"])
+    .coef.quantile([0.05, 0.5, 0.95])
+    .unstack()
+    .fillna(0)
+    .rename(columns=lambda x: "p{:02}".format(int(x * 100)))
+    .reset_index(drop=0)
+    .sort_values("p95", ascending=False)
+    .reset_index(drop=1)
+)
+
+# %%
+growth_coef[:3]
+
+# %%
+growth_dbl = growth_coef.iloc[:, 1:].apply(doubling_time).assign(state=growth_coef.state)
+
+# %%
+color = 'dvers'
+x = 'state'
+y = 'p50'
+
+h = Chart(growth_dbl).mark_point().encode(
+    x=A.X(x, title=x, sort=None),
+    y=A.Y(y, title='Exponent'),
+    tooltip=[x, y]
+)
+
+herr = h.mark_errorbar().encode(y=A.Y('p05', title='Exponent'), y2='p95')
+# (h + h.mark_point()).interactive()
+(herr + h).properties(title='Doubling rates')
+
+# %%
+color = 'dvers'
+x = 'state'
+y = 'p50'
+
+h = Chart(growth_coef).mark_point().encode(
+    x=A.X(x, title=x, sort=None),
+    y=A.Y(y, title='Exponent'),
+    tooltip=[x, y]
+)
+
+herr = h.mark_errorbar().encode(y=A.Y('p05', title='Exponent'), y2='p95')
+# (h + h.mark_point()).interactive()
+herr + h
 
 # %%
 color = 'dvers'
@@ -220,10 +280,13 @@ herr + h
 dfsim_out = pd.read_feather(data_dir / 'mort_0327_sim_out.fth').rename(columns={'pred_state': 'state', 'pred_daysi': 'daysi'})
 dfsim2 = dfsim1_.merge(dfsim_out, on=['state', 'daysi']).pipe(log_preds).assign(date=lambda x: x.daysi.map(dayi2date))
 
-
 # %% [markdown]
 # #### 03-27
 # Exponential growth in NYC is tapering off, but estimate takes previous 7 days of data, so it's still estimating high growth.
+
+# %%
+1588 * 2
+
 
 # %%
 def plot_preds_act(pred, actual, form, x = "daysi", log=True, keep_group=None):
