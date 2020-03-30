@@ -65,7 +65,8 @@ dfct = cvs.load_ga_county()
 ga_agg = cvs.load_ga_agg()
 
 # %%
-date_arg = '03-27'
+date_arg = '03-29'
+fn_date = '0329'
 dfs = (
     load_states(date=date_arg)
     .sort_values(["state", "date"], ascending=True)
@@ -87,7 +88,7 @@ print(f"Current actual max date: {cvs.load_states().date.max()}")
 
 def log_preds(df):
     preds = [c for c in df if c.startswith('pred_')]
-    df = df.assign(**{pred: lambda x, pred=pred: 10 ** x[pred] for pred in preds})
+    df = df.assign(**{pred: lambda x, pred=pred: np.exp(x[pred]) for pred in preds})
     return df
 
 dfd = cvs.filter_mortality(dfs)
@@ -113,20 +114,30 @@ def dayi2date(i):
 # %%
 dfsim1_ = mtx.mk_sim_df1(dfd).assign(date=lambda x: x.daysi.map(dayi2date))
 
+# %%
 # Write to R; generate simulations
 dfd_wk = dfd.pipe(lambda x: x[x.date >= x.date.max() - pd.Timedelta(days=7)]).reset_index(drop=1)
-dfd_wk.to_feather(data_dir / 'mort_0327.fth')
-dfsim1_.to_feather(data_dir / 'mort_0324_sim.fth')
-
-# %%
+dfd_wk.to_feather(data_dir / f'mort_{fn_date}.fth')
+dfsim1_.to_feather(data_dir / f'mort_sim_{fn_date}.fth')
 
 # %% [markdown]
 # ## Model v1
 
 # %%
 # Read end result
-dfsim_out = pd.read_feather('covid/data/mort_0320_sim_out.fth')
-dfsim1 = dfsim1_.merge(dfsim_out, on='row').pipe(log_preds)
+# dfsim_out = pd.read_feather(data_dir / 'mort_0320_sim_out.fth')
+dfsim_preds = pd.read_feather(data_dir / 'mort_preds_0328.fth')
+# dfsim1 = dfsim1_.merge(dfsim_out, on='row').pipe(log_preds)
+
+# %%
+dfsim_preds = pd.read_feather(data_dir / "mort_preds_0328.fth").rename(
+    columns={"pred_state": "state", "pred_daysi": "daysi"}
+)
+dfsim2_preds = (
+    dfsim1_.merge(dfsim_preds, on=["state", "daysi"])
+    .pipe(log_preds)
+    .assign(date=lambda x: x.daysi.map(dayi2date))
+)
 
 # %% [markdown]
 # #### Plot Results
@@ -137,7 +148,7 @@ x = "daysi"
 y = "pred_mu"
 
 
-pred = dfsim1
+pred = dfsim2_preds
 actual = dfd.assign(pred_mu=lambda x: x["death"])
 
 
@@ -163,7 +174,7 @@ ch_est = h_est + h_est.mark_point() + h_est_err
 
 form1 = "bf(ldeaths ~ daysi + (1 | state)) + gaussian()"
 save_ch = (ch_act + ch_est).properties(title=form1)
-# save_ch
+save_ch
 
 # %%
 # m1_path = Path('covid/models/mortal/v1')
@@ -179,8 +190,6 @@ save_ch = (ch_act + ch_est).properties(title=form1)
 # Estimate doubling rate below with rule of 72. Exponent for WA is about .05, so doubling rate is about 72 / 5 = 14.4 days. This gets less accurate (but still high) for higher coefficient states like NY.
 
 # %%
-
-# %%
 WA = .05
 def doubling_time(ex):
     return 1 / ex * np.log(2)
@@ -188,25 +197,26 @@ def doubling_time(ex):
 doubling_time(.17)
 
 # %%
-draws = pd.read_feather(data_dir / "mort_draws.fth")
-growth_coef = (
+fn_spread = data_dir / "mort_draws.fth"
+
+# %%
+draws = pd.read_feather(fn_spread)
+growth_dbl = (
     draws.query("coef == 'daysi'")
     .assign(coef=lambda x: x.b_daysi + x.r_state)
+    .assign(doubling_time=lambda x: doubling_time(x.coef))
     .groupby(["state"])
-    .coef.quantile([0.05, 0.5, 0.95])
+    .doubling_time.quantile([0.05, 0.5, 0.95])
     .unstack()
     .fillna(0)
     .rename(columns=lambda x: "p{:02}".format(int(x * 100)))
     .reset_index(drop=0)
-    .sort_values("p95", ascending=False)
+    .sort_values("p05", ascending=True)
     .reset_index(drop=1)
 )
 
-# %%
-growth_coef[:3]
-
-# %%
-growth_dbl = growth_coef.iloc[:, 1:].apply(doubling_time).assign(state=growth_coef.state)
+# %% [markdown]
+# Doubling rate: if the value is around 2, then expect the number of deaths to double every 2 days.
 
 # %%
 color = 'dvers'
@@ -223,44 +233,6 @@ herr = h.mark_errorbar().encode(y=A.Y('p05', title='Exponent'), y2='p95')
 # (h + h.mark_point()).interactive()
 (herr + h).properties(title='Doubling rates')
 
-# %%
-color = 'dvers'
-x = 'state'
-y = 'p50'
-
-h = Chart(growth_coef).mark_point().encode(
-    x=A.X(x, title=x, sort=None),
-    y=A.Y(y, title='Exponent'),
-    tooltip=[x, y]
-)
-
-herr = h.mark_errorbar().encode(y=A.Y('p05', title='Exponent'), y2='p95')
-# (h + h.mark_point()).interactive()
-herr + h
-
-# %%
-color = 'dvers'
-x = 'state'
-y = 'Estimate'
-
-m2_coefs = (
-#     pd.read_feather(data_dir / "mort_m2_coef.fth")
-    pd.read_feather(data_dir / "mort_m2_coef_27w.fth")
-    .sort_values("Q97.5", ascending=False)
-    .reset_index(drop=1)
-)
-
-pdf = m2_coefs
-
-h = Chart(pdf).mark_point().encode(
-    x=A.X(x, title=x, sort=None),
-    y=A.Y(y, title='Exponent'),
-    tooltip=[x, y]
-)
-
-herr = h.mark_errorbar().encode(y=A.Y('Q2.5', title='Exponent'), y2='Q97.5')
-# (h + h.mark_point()).interactive()
-herr + h
 
 # %%
 # xs = np.arange(100)
@@ -274,19 +246,9 @@ herr + h
 # %% [markdown]
 # ### Load simulated data
 
-# %%
-# dfsim_out = pd.read_feather(data_dir / 'mort_v2_sim_out.fth')
-# dfsim_out = pd.read_feather(data_dir / 'mort_0324_sim_out.fth')
-dfsim_out = pd.read_feather(data_dir / 'mort_0327_sim_out.fth').rename(columns={'pred_state': 'state', 'pred_daysi': 'daysi'})
-dfsim2 = dfsim1_.merge(dfsim_out, on=['state', 'daysi']).pipe(log_preds).assign(date=lambda x: x.daysi.map(dayi2date))
-
 # %% [markdown]
 # #### 03-27
 # Exponential growth in NYC is tapering off, but estimate takes previous 7 days of data, so it's still estimating high growth.
-
-# %%
-1588 * 2
-
 
 # %%
 def plot_preds_act(pred, actual, form, x = "daysi", log=True, keep_group=None):
@@ -331,7 +293,7 @@ states_low_deaths = dfd.groupby('state').death.max().pipe(lambda x: x[x < 10]).i
 # bf(ldeaths ~ (1 | state) + daysi + (0 + daysi | state))
 form2 = "ldeaths ~ (1 | state) + daysi + (0 + daysi | state)"
 
-pdfsim = dfsim2.query("state not in @states_low_deaths")
+pdfsim = dfsim2_preds.query("state not in @states_low_deaths")
 pdfd = dfd.query("state not in @states_low_deaths")
 
 # m2pl_lin = plot_preds_act(pred=pdfsim, actual=pdfd, form=form2, x='date', log=0).properties(width=900, height=600)

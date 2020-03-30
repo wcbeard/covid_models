@@ -63,7 +63,7 @@ cvs.load_states().date.max()
 
 # %%
 # Then increment arg
-date_arg = '03-27'
+date_arg = '03-29'
 dfs = load_states(date=date_arg).sort_values(["state", 'date'], ascending=True).reset_index(drop=1)
 dfs.date.max()
 
